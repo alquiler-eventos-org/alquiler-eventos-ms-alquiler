@@ -10,6 +10,30 @@ spring:
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
     enabled: false
+  data:
+    web:
+      pageable:
+        default-page-size: ${DEFAULT_PAGE_SIZE:10}
+        max-page-size: ${MAX_PAGE_SIZE:100}
+        page-parameter: page
+        size-parameter: size
+
+logging:
+  config: ${LOGGING_CONFIG:classpath:logback-spring.xml}
+  level:
+    root: ${LOG_LEVEL_ROOT:INFO}
+    com.alquilereventos.alquiler.controller: ${LOG_LEVEL_CONTROLLER:INFO}
+    com.alquilereventos.alquiler.service: ${LOG_LEVEL_SERVICE:DEBUG}
+    org.hibernate.SQL: ${LOG_LEVEL_SQL:DEBUG}
+
+app:
+  logs:
+    directory: ${LOG_DIR:./logs}
+  pagination:
+    default-page: ${DEFAULT_PAGE:0}
+    default-size: ${DEFAULT_PAGE_SIZE:10}
+  mora:
+    porcentaje-dia: ${MORA_PORCENTAJE_DIA:0.05}
 
 server:
   port: ${SERVER_PORT:8081}

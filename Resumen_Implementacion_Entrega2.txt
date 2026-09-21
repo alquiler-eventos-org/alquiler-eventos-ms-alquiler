@@ -1,0 +1,122 @@
+Listo, todo ejecutado y compilando. Resumen:
+
+**Paso 1 — common**
+- `openapi.yaml`: agregué paths `/ordenes-alquiler` (`GET`/`POST`), `/ordenes-alquiler/{id}` (`GET`/`PUT`/`DELETE`), `/ordenes-alquiler/{id}/estado` (`PUT`) + schemas `EstadoOrdenAlquiler`, `OrdenAlquiler`, `OrdenAlquilerDetalle`, `OrdenAlquilerCrearRequest`, `OrdenAlquilerEstadoRequest`, `PageOrdenAlquiler`.
+- `mvn clean install` OK: DTOs generados y JAR instalado en `~/.m2`.
+- Rama `feature/dto-orden-alquiler` pusheada con 2 commits (yaml + README). **No pude crear el PR** (no hay `gh`): abrila en https://github.com/alquiler-eventos-org/alquiler-eventos-common/pull/new/feature/dto-orden-alquiler
+
+**Paso 2 — ms-alquiler**
+- `OrdenAlquilerMapper` (entity ⟷ DTO, con detalles y días).
+- `OrdenAlquilerService`/`Impl`: valida cliente activo, stock, equipo disponible; `subtotal = cantidad×precioDia×días`, total suma; historial en cada cambio; `mora = díasAtraso×total×MORA_PORCENTAJE_DIA`; transiciones válidas (RESERVA→ENTREGA/ANULADA, ENTREGA→DEVOLUCION/MORA, MORA→DEVOLUCION); ENTREGA descuenta stock, DEVOLUCION lo devuelve.
+- `OrdenAlquilerController`: 7 endpoints (los 6 + `PUT /{id}/estado`).
+
+**Paso 3**
+- `logback-spring.xml` (consola + archivo rolling, `LOG_DIR` configurable).
+- `application.yml`: logging por capas, paginación y mora configurables por env.
+- Swagger anotado en `ClienteController` y `OrdenAlquilerController`.
+- READMEs: `ms-alquiler` completo (correr, env vars, endpoints con curl, reglas, checklist rúbrica) y `common` con el workflow paso a paso de DTOs.
+
+Build verificado: `mvn clean package -DskipTests` OK.
+
+**Quedó para vos (manual):**
+1. Abrir el PR (URL de arriba) → que Setrini lo mergee → ambos `git pull` + `mvn clean install` en common.
+2. Prueba runtime contra Supabase (necesita `DB_URL/DB_USER/DB_PASSWORD`; no las tengo).
+3. Los cambios de ms-alquiler **no los commiteé** (no me lo pediste explícitamente). ¿Los commiteo?
+
+El único paso que puedo ejecutar por mi cuenta es **commitear los cambios de ms-alquiler** (7 archivos nuevos/modificados); el PR de common y la prueba runtime dependen de vos (necesitás `gh` o abrir la URL, y las credenciales de Supabase).
+
+¿Commiteo y pusheo los cambios de `alquiler-eventos-ms-alquiler`?
+
+
+--------------------------------------------------------------------------
+2) RESUMEN ESTRUCTURADO COMPLETO
+--------------------------------------------------------------------------
+
+## Objective
+Ejecutar el plan de Gemini para la Entrega 2 del sistema de **Alquiler de Equipos de Eventos**
+(FIUNI, Sistemas Web y Distribuidos, 7mo semestre; microservicios: `common` + `ms-compras`
+(Setrini), `ms-alquiler` (Tobi); deadline 26/09). Los bloques:
+1. Agregar DTOs de **OrdenAlquiler** en `common` (editar `openapi.yaml` → generar DTOs → instalar JAR → feature branch + PR).
+2. Implementar el CRUD completo de **OrdenAlquiler** en `ms-alquiler` (Mapper / Service / Controller + reglas de negocio).
+3. Requisitos transversales: logging por capas (logback), Swagger anotado, configuración 100% por variables de entorno.
+4. Documentar todo **paso a paso** en los README de ambos proyectos.
+
+## Important Details
+- **Entorno**: Windows + PowerShell, Java 23.0.1 (JDK), Maven 3.9.16, `gh` NO instalado (el PR no se puede crear desde CLI; solo con URL manual).
+- **Repos locales** (bajo `...\Alquiler_eventos\`):
+  - `alquiler-eventos-common` → remote `https://github.com/alquiler-eventos-org/alquiler-eventos-common.git`
+  - `alquiler-eventos-ms-alquiler` → remote `https://github.com/alquiler-eventos-org/alquiler-eventos-ms-alquiler.git`
+- **Acuerdo de trabajo**: en `common` se trabaja con rama `feature/*` + Pull Request con review de Setrini; `ms-alquiler` es de autonomía de Tobi (commits directos a main).
+- **DTOs**: se generan SOLOS con `openapi-generator-maven-plugin` 7.4.0 (JavaClientCodegen) desde `common/src/main/resources/openapi.yaml` a `target/generated-sources/openapi/`, package `com.alquilereventos.common.dto`. NO existe package `dto` manual en `src/main/java` de common.
+- **JAR**: `alquiler-eventos-common-1.0.0-SNAPSHOT.jar` (+ `-exec.jar`) instalado en `~/.m2/repository/com/alquilereventos/alquiler-eventos-common/1.0.0-SNAPSHOT/` (build 21/9/2026 18:27).
+- **DTOs generados nuevos**: `EstadoOrdenAlquiler`, `OrdenAlquiler`, `OrdenAlquilerCrearRequest`, `OrdenAlquilerDetalle`, `OrdenAlquilerEstadoRequest`, `PageOrdenAlquiler`.
+- **Particularidades de los DTOs generados** (clave para el mapper):
+  - `OrdenAlquiler`: constructor `(Integer id, String clienteNombre, Double total, OffsetDateTime createdAt)`; los campos `readOnly` NO tienen setter (entran solo por constructor, en ese orden).
+  - `OrdenAlquilerDetalle`: constructor `(Integer id, String equipoNombre, Integer dias, Double subtotal)`; setters SOLO para `equipoId`, `cantidad`, `precioDia`.
+  - La entidad `OrdenAlquilerDetalle` NO persiste `dias` → se **calcula en el mapper** como `fechaDevolucion − fechaEvento + 1` (mínimo 1).
+- **Trampa de Hibernate (ya resuelta)**: `OrdenAlquiler.detalles` es `@OneToMany(cascade = ALL, orphanRemoval = true)` → al reasignar la colección con `setDetalles(listaNueva)` fuera del dueño da error *"collection with cascade=all-delete-orphan was no longer referenced"*. Se refactorizó `armarDetalles`: si `getDetalles() == null` → `setDetalles(lista)` (crear); si no → `getDetalles().clear()` + `addAll(lista)` (actualizar).
+- **Enums**: `EstadoOrdenAlquiler = RESERVA, ENTREGA, DEVOLUCION, MORA, ANULADA`; `EstadoEquipo = DISPONIBLE, MANTENIMIENTO, BAJA`.
+- **Capa de datos**: entidades y repositorios NO viven en ms-alquiler, se importan del JAR (`com.alquilereventos.common.repository`, escaneado con `@EnableJpaRepositories` en `MsAlquilerApplication`). Liquibase apagado en este MS (`enabled: false`) + `ddl-auto: validate`; base remota Supabase.
+- **Bloqueo de prueba**: no hay credenciales locales de Supabase (`DB_URL/DB_USER/DB_PASSWORD`) → no se puede probar runtime/endpoints acá.
+- **Rúbrica de referencia**: `common/Entrega2.txt` (Secciones 1–8, checklist en la Sección 7).
+- **Herramientas**: los edits en Windows a veces "pegan" líneas en columna 0 → verificar indentación YAML tras editar (se detectó y reparó `totalElementos` suelto en `PageProveedor`).
+
+## Work State
+
+### Completed
+- **Paso 1a — `openapi.yaml` (common)**:
+  - Paths: `GET/POST /ordenes-alquiler`, `GET/PUT/DELETE /ordenes-alquiler/{id}`, `PUT /ordenes-alquiler/{id}/estado`.
+  - Schemas: `EstadoOrdenAlquiler`, `OrdenAlquiler`, `OrdenAlquilerDetalle`, `OrdenAlquilerCrearRequest`, `OrdenAlquilerEstadoRequest`, `PageOrdenAlquiler`.
+  - `readOnly: true` en lo que calcula el server (`id`, `total`, `createdAt`, `subtotal`).
+- **Paso 1b — Build de common**: `mvn clean install` OK; 6 DTOs nuevos generados y confirmados en `target/generated-sources`; JAR instalado en `~/.m2`.
+- **Paso 1c — Git de common**: rama `feature/dto-orden-alquiler` **pusheada** con 2 commits:
+  - `46e9a06` "PASO 6: DTOs y endpoints de Ordenes de Alquiler en openapi.yaml (seccion de Tobi)"
+  - `2979af8` "PASO 6: Documentar workflow de DTOs y estado del trabajo en README"
+  - PR NO creado (sin `gh`). URL manual: `https://github.com/alquiler-eventos-org/alquiler-eventos-common/pull/new/feature/dto-orden-alquiler`
+- **Paso 2a — `OrdenAlquilerMapper`** (implementa `Mapper<E, D>` genérico, entra en la jerarquía): `toDto` con `clienteNombre`, `createdAt`, `dias` calculado por detalle; `toDetalleEntity` setea `equipoId`, `cantidad`, `precioDia`, `subtotal`.
+- **Paso 2b — `OrdenAlquilerService`/`Impl`**:
+  - `crear`: valida cliente (existe + `activo`), usuario, equipos en estado `DISPONIBLE`, stock (`cantidad <= stock`); `dias = fechaDevolucion − fechaEvento + 1` (mín 1); `subtotal = cantidad × precioDia × dias` (`scale 2`, `HALF_UP`); `total` = suma de subtotales; estado inicial `RESERVA`; historial `CREACION → RESERVA`.
+  - `actualizar`: solo en estado `RESERVA`; re-valida todo; `armarDetalles` con `clear()+addAll()` (fix orphanRemoval).
+  - `obtenerPorId` / `listar` / `buscar`: `@Transactional(readOnly = true)` (lazy loading de detalles).
+  - `eliminar`: solo `RESERVA → ANULADA`, usuario = autor de la orden; historial `RESERVA → ANULADA`.
+  - `cambiarEstado`: transiciones válidas `RESERVA→ENTREGA|ANULADA`, `ENTREGA→DEVOLUCION|MORA`, `MORA→DEVOLUCION` (`DEVOLUCION`/`ANULADA` terminales); `ENTREGA` descuenta stock, `DEVOLUCION` lo devuelve; `MORA` solo si hay atraso y calcula `montoMora = diasAtraso × total × moraPorcentajeDia` con `@Value("${app.mora.porcentaje-dia:0.05}")`; cada transición registra `OrdenAlquilerHistorial`.
+  - Logging SLF4J clave por operación.
+- **Paso 2c — `OrdenAlquilerController`**: 6 endpoints de `/api/ordenes-alquiler` + `PUT /{id}/estado`; convierte DTO enum → entity enum con `valueOf` en `buscar`/`cambiarEstado`.
+- **Paso 3a — `logback-spring.xml`** (nuevo): Console + RollingFile (`${LOG_DIR:./logs}/alquiler-eventos-ms.log`, rolling `.log.gz` diario, `maxHistory 30`, UTF-8); root `INFO` reusando defaults de Spring.
+- **Paso 3b — `application.yml`** (reescrito): `logging.config: classpath:logback-spring.xml`; niveles de log por capa (`LOG_LEVEL_ROOT/CONTROLLER/SERVICE/SQL`); `spring.data.web.pageable` (default 10, max 100); `app.pagination`; `app.logs.directory`; `app.mora.porcentaje-dia` (`MORA_PORCENTAJE_DIA`); `server.port ${SERVER_PORT:8081}`; `context-path /api`; springdoc `/swagger-ui.html`.
+- **Paso 3c — Swagger**: `@Tag`, `@Operation`, `@Parameter`, `@ApiResponses`, `@Schema` en `ClienteController` (lógica intacta) y `OrdenAlquilerController`.
+- **Paso 3d — READMEs**:
+  - `ms-alquiler/README.md` (completo): descripción/rol, stack, estructura, requisitos, cómo correr, tabla de 13 variables de entorno, Swagger, tablas de endpoints con `curl` (crear orden, cambiar estado, buscar), reglas de negocio, manejo de errores (`ApiError`), logs, workflow git y checklist de la rúbrica.
+  - `common/README.md`: nueva sección "Cómo agregar DTOs (paso a paso)", lista de DTOs disponibles, y PASO 5 / PASO 6 en "Estado del trabajo".
+- **Build verificado**: `mvn -q clean package -DskipTests` en ms-alquiler OK → `target/ms-alquiler-0.0.1-SNAPSHOT.jar` (~66 MB). Implícitamente recompila tras el refactor de colección.
+- **Este resumen**: `ms-alquiler/Resumen_Implementacion_Entrega2.txt`.
+
+### Active
+- Nada en ejecución. Único paso ejecutable pendiente de decisión del usuario: **commitear los cambios de ms-alquiler**.
+
+### Blocked
+- **PR de common**: necesita abrir la URL manualmente (no hay `gh`) y que Setrini reviewee/mergee.
+- **Prueba runtime** contra Supabase: requiere `DB_URL/DB_USER/DB_PASSWORD` (no disponibles localmente).
+- **Commit de ms-alquiler**: pendiente de autorización explícita del usuario (no se commitea sin pedido).
+
+## Next Move
+1. Decidir si se commitean y pushean los cambios de ms-alquiler (7 archivos: 4 nuevos + 3 modificados).
+2. Abrir el PR de common en la URL indicada (rama ya pusheada con 2 commits) y pedir review a Setrini.
+3. Tras el merge de common: ambos integrantes `git pull` + `mvn clean install` en common (ms-alquiler consume el JAR).
+4. Probar runtime contra Supabase con env vars cargadas: `java -jar target/ms-alquiler-0.0.1-SNAPSHOT.jar`; probar endpoints y Swagger en `http://localhost:8081/api/swagger-ui.html`.
+5. Recorrer el checklist de la Sección 7 de `common/Entrega2.txt` para validar la rúbrica antes del 26/09.
+
+## Relevant Files
+- `common/src/main/resources/openapi.yaml` (modificado; rama `feature/dto-orden-alquiler`): paths + schemas de OrdenAlquiler; **no tocar `components` fuera de esta rama**.
+- `common/target/generated-sources/openapi/src/main/java/com/alquilereventos/common/dto/` (generado, NO se edita a mano): 6 DTOs nuevos de alquiler.
+- `common/README.md` (modificado): workflow de DTOs paso a paso + estado del trabajo.
+- `common/Entrega2.txt`: guía del proyecto / rúbrica (Sección 7).
+- `ms-alquiler/src/main/java/com/alquilereventos/alquiler/mapper/OrdenAlquilerMapper.java` (nuevo) + `Mapper.java` (interfaz genérica ya existente).
+- `ms-alquiler/src/main/java/com/alquilereventos/alquiler/service/OrdenAlquilerService.java` (nuevo) y `OrdenAlquilerServiceImpl.java` (nuevo).
+- `ms-alquiler/src/main/java/com/alquilereventos/alquiler/controller/OrdenAlquilerController.java` (nuevo).
+- `ms-alquiler/src/main/java/com/alquilereventos/alquiler/controller/ClienteController.java` (modificado: solo anotaciones Swagger, misma lógica).
+- `ms-alquiler/src/main/resources/logback-spring.xml` (nuevo) y `application.yml` (modificado: logging, paginación, mora, puertos).
+- `ms-alquiler/README.md` (contenido completo nuevo) y `ms-alquiler/Resumen_Implementacion_Entrega2.txt` (este documento).
+- `ms-alquiler/target/ms-alquiler-0.0.1-SNAPSHOT.jar` (build verificado `mvn clean package -DskipTests`).
+
+El único paso que puedo ejecutar por mi cuenta es commitear los cambios de ms-alquiler (7 archivos nuevos/modificados); el PR de common y la prueba runtime dependen de vos (necesitás gh o abrir la URL, y las credenciales de Supabase).
