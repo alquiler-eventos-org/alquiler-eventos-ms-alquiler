@@ -1,6 +1,6 @@
 # alquiler-eventos-ms-alquiler
 
-Microservicio de **Ordens de Alquiler** del sistema de alquiler de equipos para
+Microservicio de **Órdenes de Alquiler** del sistema de alquiler de equipos para
 eventos (FIUNI - Sistemas Web y Distribuidos, Entrega 2).
 
 Rol del usuario que atiende: **Encargado de Depósito / Admin**.
@@ -44,7 +44,7 @@ src/main/java/com/alquilereventos/alquiler/
 ├── MsAlquilerApplication.java        # Arranque Spring Boot (@EntityScan/@EnableJpaRepositories)
 ├── controller/
 │   ├── ClienteController.java        # /api/clientes (6 endpoints)
-│   └── OrdenAlquilerController.java  # /api/ordenes-alquiler (6 + cambio de estado)
+│   └── OrdenAlquilerController.java  # /api/ordenes-alquiler (7 endpoints)
 ├── service/
 │   ├── ClienteService.java           # Interfaz
 │   ├── ClienteServiceImpl.java
@@ -171,16 +171,16 @@ curl "http://localhost:8081/api/clientes?page=0&size=10"
 curl "http://localhost:8081/api/clientes/buscar?nombre=juan&page=0&size=10"
 ```
 
-### Ordenes de alquiler — `/api/ordenes-alquiler`
+### Órdenes de alquiler — `/api/ordenes-alquiler`
 
 | Método | Ruta | Descripción | Códigos |
 |---|---|---|---|
 | POST | `/ordenes-alquiler` | Crea la orden con detalles (estado inicial `RESERVA`) | 201 / 400 / 404 |
 | PUT | `/ordenes-alquiler/{id}` | Actualiza (solo si está en `RESERVA`) | 200 / 400 / 404 |
 | GET | `/ordenes-alquiler/{id}` | Obtiene por id con sus detalles | 200 / 404 |
-| GET | `/ordenes-alquiler?estado=&clienteId=&fechaDesde=&fechaHasta=&page=&size=` | Lista/busca paginada | 200 |
-| GET | `/ordenes-alquiler/buscar?estado=&clienteId=&fechaDesde=&fechaHasta=&page=&size=` | Igual que el listado con filtros | 200 |
-| DELETE | `/ordenes-alquiler/{id}` | Botrado lógico `ANULADA` (solo en `RESERVA`) | 200 / 400 / 404 |
+| GET | `/ordenes-alquiler?page=&size=` | Lista paginada (sin filtros) | 200 |
+| GET | `/ordenes-alquiler/buscar?estado=&clienteId=&fechaDesde=&fechaHasta=&page=&size=` | Busca con filtros + paginación | 200 |
+| DELETE | `/ordenes-alquiler/{id}` | Borrado lógico `ANULADA` (solo en `RESERVA`) | 200 / 400 / 404 |
 | PUT | `/ordenes-alquiler/{id}/estado` | Cambia estado (`ENTREGA`, `DEVOLUCION`, `MORA`, `ANULADA`) | 200 / 400 / 404 |
 
 **Crear una orden** (el servidor calcula `subtotal = cantidad × precioDia × días`
@@ -212,7 +212,7 @@ curl -X PUT http://localhost:8081/api/ordenes-alquiler/1/estado \
 **Buscar con filtros y paginación:**
 
 ```bash
-curl "http://localhost:8081/api/ordenes-alquiler?estado=RESERVA&clienteId=1&fechaDesde=2026-09-01&fechaHasta=2026-09-30&page=0&size=10"
+curl "http://localhost:8081/api/ordenes-alquiler/buscar?estado=RESERVA&clienteId=1&fechaDesde=2026-09-01&fechaHasta=2026-09-30&page=0&size=10"
 ```
 
 ---
