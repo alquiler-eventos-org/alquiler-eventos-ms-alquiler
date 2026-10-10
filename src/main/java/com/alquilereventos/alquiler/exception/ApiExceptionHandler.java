@@ -6,6 +6,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -26,6 +28,24 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiError> handleReglaNegocio(ReglaNegocioException ex, HttpServletRequest request) {
         log.info("Regla de negocio violada: {}", ex.getMessage());
         return construir(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiError> handleValidacion(MethodArgumentNotValidException ex, HttpServletRequest request) {
+        String campo = ex.getBindingResult().getFieldErrors().stream()
+                .findFirst()
+                .map(e -> e.getField() + ": " + e.getDefaultMessage())
+                .orElse("Datos de entrada invalidos");
+        log.info("Validacion fallida: {}", campo);
+        return construir(HttpStatus.BAD_REQUEST, campo, request);
+    }
+
+    // Un cuerpo mal formado (JSON roto) es un error del CLIENTE (400), no del
+    // servidor (500). Sin este handler, cae en el generico como 500.
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> handleJsonInvalido(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        log.info("Cuerpo de solicitud ilegible (JSON invalido): {}", ex.getMostSpecificCause().getMessage());
+        return construir(HttpStatus.BAD_REQUEST, "Cuerpo de solicitud invalido (JSON mal formado)", request);
     }
 
     @ExceptionHandler(Exception.class)
