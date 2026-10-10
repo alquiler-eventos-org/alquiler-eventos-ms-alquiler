@@ -11,6 +11,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -22,6 +25,8 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/clientes")
 @Tag(name = "Clientes", description = "Gestion de clientes: CRUD con paginacion, filtros y borrado logico")
 public class ClienteController {
+
+    private static final Logger log = LoggerFactory.getLogger(ClienteController.class);
 
     private final ClienteService clienteService;
 
@@ -37,6 +42,7 @@ public class ClienteController {
             @ApiResponse(responseCode = "400", description = "Datos invalidos (ej. documento repetido)", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
     public ResponseEntity<Cliente> crear(@RequestBody Cliente dto) {
+        log.info("POST /clientes - crear cliente (documento={})", dto.getDocumento());
         Cliente creado = clienteService.crear(dto);
         return ResponseEntity.status(HttpStatus.CREATED).body(creado);
     }
@@ -48,6 +54,7 @@ public class ClienteController {
             @ApiResponse(responseCode = "404", description = "Cliente no encontrado", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
     public ResponseEntity<Cliente> actualizar(@PathVariable Integer id, @RequestBody Cliente dto) {
+        log.info("PUT /clientes/{} - actualizar cliente", id);
         Cliente actualizado = clienteService.actualizar(id, dto);
         return ResponseEntity.ok(actualizado);
     }
@@ -59,6 +66,7 @@ public class ClienteController {
             @ApiResponse(responseCode = "404", description = "Cliente no encontrado", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
     public ResponseEntity<Cliente> obtenerPorId(@PathVariable Integer id) {
+        log.info("GET /clientes/{} - obtener cliente", id);
         Cliente cliente = clienteService.obtenerPorId(id);
         return ResponseEntity.ok(cliente);
     }
@@ -68,7 +76,8 @@ public class ClienteController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Pagina de clientes", content = @Content(schema = @Schema(implementation = Page.class)))
     })
-    public ResponseEntity<Page<Cliente>> listar(Pageable pageable) {
+    public ResponseEntity<Page<Cliente>> listar(@ParameterObject Pageable pageable) {
+        log.info("GET /clientes - listar (page={}, size={})", pageable.getPageNumber(), pageable.getPageSize());
         Page<Cliente> pagina = clienteService.listar(pageable);
         return ResponseEntity.ok(pagina);
     }
@@ -88,7 +97,8 @@ public class ClienteController {
             @RequestParam(required = false) String apellido,
             @RequestParam(required = false) String documento,
             @RequestParam(required = false) String email,
-            Pageable pageable) {
+            @ParameterObject Pageable pageable) {
+        log.info("GET /clientes/buscar - nombre={}, apellido={}, documento={}, email={}, page={}, size={}", nombre, apellido, documento, email, pageable.getPageNumber(), pageable.getPageSize());
         Page<Cliente> pagina = clienteService.buscar(nombre, apellido, documento, email, pageable);
         return ResponseEntity.ok(pagina);
     }
@@ -100,6 +110,7 @@ public class ClienteController {
             @ApiResponse(responseCode = "404", description = "Cliente no encontrado", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
     public ResponseEntity<Void> eliminar(@PathVariable Integer id) {
+        log.info("DELETE /clientes/{} - borrado logico", id);
         clienteService.eliminar(id);
         return ResponseEntity.ok().build();
     }

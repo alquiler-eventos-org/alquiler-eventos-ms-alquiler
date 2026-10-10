@@ -36,6 +36,11 @@ app:
     default-size: ${DEFAULT_PAGE_SIZE:10}
   mora:
     porcentaje-dia: ${MORA_PORCENTAJE_DIA:0.05}
+  openapi:
+    title: ${OPENAPI_TITLE:ms-alquiler - Clientes y Ordenes de Alquiler}
+    description: ${OPENAPI_DESCRIPTION:Microservicio de alquiler de equipos para eventos}
+    version: ${OPENAPI_VERSION:1.0.0}
+    server-url: ${OPENAPI_SERVER_URL:http://localhost:8080/api}
 
 server:
   port: ${SERVER_PORT:8081}

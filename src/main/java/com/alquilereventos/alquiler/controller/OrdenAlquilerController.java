@@ -13,6 +13,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -27,6 +30,8 @@ import java.time.LocalDate;
 @RequestMapping("/ordenes-alquiler")
 @Tag(name = "Ordenes-Alquiler", description = "Gestion de ordenes de alquiler de equipos: CRUD, filtros y cambio de estado")
 public class OrdenAlquilerController {
+
+    private static final Logger log = LoggerFactory.getLogger(OrdenAlquilerController.class);
 
     private final OrdenAlquilerService ordenAlquilerService;
 
@@ -44,6 +49,7 @@ public class OrdenAlquilerController {
             @ApiResponse(responseCode = "404", description = "Cliente, usuario o equipo no encontrado", content = @Content(schema = @Schema(implementation = com.alquilereventos.common.dto.ApiError.class)))
     })
     public ResponseEntity<OrdenAlquiler> crear(@RequestBody OrdenAlquilerCrearRequest request) {
+        log.info("POST /ordenes-alquiler - crear orden (clienteId={})", request.getClienteId());
         OrdenAlquiler creada = ordenAlquilerService.crear(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(creada);
     }
@@ -58,6 +64,7 @@ public class OrdenAlquilerController {
     })
     public ResponseEntity<OrdenAlquiler> actualizar(@PathVariable Integer id,
                                                     @RequestBody OrdenAlquilerCrearRequest request) {
+        log.info("PUT /ordenes-alquiler/{} - actualizar orden", id);
         OrdenAlquiler actualizada = ordenAlquilerService.actualizar(id, request);
         return ResponseEntity.ok(actualizada);
     }
@@ -69,6 +76,7 @@ public class OrdenAlquilerController {
             @ApiResponse(responseCode = "404", description = "Orden de alquiler no encontrada", content = @Content(schema = @Schema(implementation = com.alquilereventos.common.dto.ApiError.class)))
     })
     public ResponseEntity<OrdenAlquiler> obtenerPorId(@PathVariable Integer id) {
+        log.info("GET /ordenes-alquiler/{} - obtener orden", id);
         OrdenAlquiler orden = ordenAlquilerService.obtenerPorId(id);
         return ResponseEntity.ok(orden);
     }
@@ -78,7 +86,8 @@ public class OrdenAlquilerController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Pagina de ordenes de alquiler", content = @Content(schema = @Schema(implementation = Page.class)))
     })
-    public ResponseEntity<Page<OrdenAlquiler>> listar(Pageable pageable) {
+    public ResponseEntity<Page<OrdenAlquiler>> listar(@ParameterObject Pageable pageable) {
+        log.info("GET /ordenes-alquiler - listar (page={}, size={})", pageable.getPageNumber(), pageable.getPageSize());
         Page<OrdenAlquiler> pagina = ordenAlquilerService.listar(pageable);
         return ResponseEntity.ok(pagina);
     }
@@ -98,7 +107,8 @@ public class OrdenAlquilerController {
             @RequestParam(required = false) Integer clienteId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
-            Pageable pageable) {
+            @ParameterObject Pageable pageable) {
+        log.info("GET /ordenes-alquiler/buscar - estado={}, clienteId={}, fechaDesde={}, fechaHasta={}, page={}, size={}", estado, clienteId, fechaDesde, fechaHasta, pageable.getPageNumber(), pageable.getPageSize());
         com.alquilereventos.common.entity.enums.EstadoOrdenAlquiler estadoEntity =
                 estado != null ? com.alquilereventos.common.entity.enums.EstadoOrdenAlquiler.valueOf(estado.name()) : null;
         Page<OrdenAlquiler> pagina = ordenAlquilerService.buscar(estadoEntity, clienteId, fechaDesde, fechaHasta, pageable);
@@ -114,6 +124,7 @@ public class OrdenAlquilerController {
             @ApiResponse(responseCode = "404", description = "Orden de alquiler no encontrada", content = @Content(schema = @Schema(implementation = com.alquilereventos.common.dto.ApiError.class)))
     })
     public ResponseEntity<Void> eliminar(@PathVariable Integer id) {
+        log.info("DELETE /ordenes-alquiler/{} - anular orden (borrado logico)", id);
         ordenAlquilerService.eliminar(id);
         return ResponseEntity.ok().build();
     }
@@ -129,6 +140,7 @@ public class OrdenAlquilerController {
     })
     public ResponseEntity<OrdenAlquiler> cambiarEstado(@PathVariable Integer id,
                                                        @RequestBody OrdenAlquilerEstadoRequest request) {
+        log.info("PUT /ordenes-alquiler/{}/estado - nuevo estado={}", id, request.getEstado());
         OrdenAlquiler actualizada = ordenAlquilerService.cambiarEstado(id, request);
         return ResponseEntity.ok(actualizada);
     }
