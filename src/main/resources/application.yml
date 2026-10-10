@@ -6,6 +6,11 @@ spring:
     username: ${DB_USER}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      # El pooler gratis de Supabase (modo session) permite 15 conexiones en total.
+      # Cada microservicio usa pocas para que entren todos a la vez.
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:3}
+      minimum-idle: ${DB_POOL_MIN_IDLE:1}
   jpa:
     hibernate:
       ddl-auto: validate
