@@ -133,9 +133,47 @@ $env:SERVER_PORT="8081"
 
 ---
 
-## Swagger / OpenAPI
+## Registro en Eureka y ejecución vía API Gateway
 
-La documentación interactiva de todos los endpoints está en:
+Este microservicio se registra en el **Eureka Server** con el nombre
+`ms-alquiler` (configurable con `APP_NAME`). El **API Gateway** lo enruta
+dinámicamente vía `lb://ms-alquiler` — sin IPs fijas.
+
+Orden de levantamiento para la demo completa:
+
+```bash
+# 1. Eureka Server (puerto 8761)
+cd alquiler-eventos-eureka && mvn spring-boot:run
+
+# 2. Este microservicio (puerto 8081) -- se registra solo en Eureka
+cd alquiler-eventos-ms-alquiler && mvn spring-boot:run
+
+# 3. API Gateway (puerto 8080) -- enruta via lb://ms-alquiler usando Eureka
+cd alquiler-eventos-api-gateway && mvn spring-boot:run
+```
+
+Variables de Eureka (todas con default sensible):
+
+| Variable | Defecto | Descripción |
+|---|---|---|
+| `APP_NAME` | `ms-alquiler` | Nombre de servicio en Eureka |
+| `EUREKA_ENABLED` | `true` | Desactivar para correr standalone |
+| `EUREKA_DEFAULT_ZONE` | `http://localhost:8761/eureka/` | URL del Eureka Server |
+| `OPENAPI_SERVER_URL` | `http://localhost:8081/api` | Para la demo: `http://localhost:8080/api` (Try it out del Swagger pega al Gateway) |
+
+Verificación del registro: <http://localhost:8761> debe listar la instancia
+`MS-ALQUILER` con estado `UP`. A partir de ahí **todos los endpoints se
+prueban desde el Swagger unificado del Gateway**:
+
+- Swagger UI: <http://localhost:8080/swagger-ui.html> (desplegable con
+  `ms-alquiler` y `ms-compras`; los docs de este micro están en
+  `/alquiler/v3/api-docs`)
+- El proxy del front (React) también pasa por el Gateway: Vite reenvía
+  `/ms/alquiler/**` al `:8080`.
+
+## Swagger / OpenAPI (standalone)
+
+Corriendo el microservicio solo, la documentación interactiva está en:
 
 ```
 http://localhost:8081/api/swagger-ui.html
@@ -246,6 +284,8 @@ DTO `ApiError` del JAR common (`codigo`, `mensaje`, `ruta`, `fecha`):
 
 - `RecursoNoEncontradoException` → **404**
 - `ReglaNegocioException` → **400**
+- JSON mal formado / cuerpo ilegible (`HttpMessageNotReadableException`) → **400** con `ApiError`
+- Validaciones (`MethodArgumentNotValidException`) → **400** con el campo que falló
 - Cualquier error interno → **500** con mensaje genérico (jamás se expone el stacktrace).
 
 ---
@@ -291,6 +331,7 @@ Niveles por capa (configurables con las variables `LOG_LEVEL_*` de la tabla):
 - [x] Todo configurable (application.yml + variables de entorno)
 - [x] Manejo central de excepciones (`@RestControllerAdvice` + `ApiError`)
 - [x] Logs en disco por capa (SLF4J/Logback)
-- [x] Swagger documentando todos los endpoints
+- [x] Swagger documentando todos los endpoints (unificado en el API Gateway)
+- [x] Registro en Eureka + ruteo dinámico `lb://` desde el Gateway
 - [x] Conexión a la BD remota compartida (Supabase)
 - [x] README con instrucciones de corrida
