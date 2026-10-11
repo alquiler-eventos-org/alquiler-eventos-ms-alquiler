@@ -61,7 +61,9 @@ public class ClienteServiceImpl implements ClienteService {
 
     @Override
     public Page<com.alquilereventos.common.dto.Cliente> listar(Pageable pageable) {
-        return clienteRepository.findAll(pageable)
+        // Usa la query con filtros del repo: excluye los de baja logica (activo=false).
+        // GET /{id} SI devuelve los inactivos, para evidenciar el borrado logico.
+        return clienteRepository.buscar(null, null, null, null, pageable)
                 .map(clienteMapper::toDto);
     }
 
