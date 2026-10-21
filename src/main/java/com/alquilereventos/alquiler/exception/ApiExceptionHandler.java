@@ -7,6 +7,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -46,6 +48,19 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiError> handleJsonInvalido(HttpMessageNotReadableException ex, HttpServletRequest request) {
         log.info("Cuerpo de solicitud ilegible (JSON invalido): {}", ex.getMostSpecificCause().getMessage());
         return construir(HttpStatus.BAD_REQUEST, "Cuerpo de solicitud invalido (JSON mal formado)", request);
+    }
+
+    // Seguridad: nunca se filtra el detalle tecnico; siempre ApiError limpio.
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiError> handleNoAutenticado(AuthenticationException ex, HttpServletRequest request) {
+        log.warn("Token sin identidad valida: {}", ex.getMessage());
+        return construir(HttpStatus.UNAUTHORIZED, "Autenticacion requerida o token invalido", request);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiError> handleAccesoDenegado(AccessDeniedException ex, HttpServletRequest request) {
+        log.warn("Acceso denegado a {} {}", request.getMethod(), request.getRequestURI());
+        return construir(HttpStatus.FORBIDDEN, "No posee permisos para este recurso", request);
     }
 
     @ExceptionHandler(Exception.class)

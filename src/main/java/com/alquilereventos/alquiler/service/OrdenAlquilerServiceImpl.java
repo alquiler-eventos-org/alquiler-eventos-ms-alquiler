@@ -1,5 +1,6 @@
 package com.alquilereventos.alquiler.service;
 
+import com.alquilereventos.alquiler.config.cache.CacheKeyFactory;
 import com.alquilereventos.alquiler.exception.RecursoNoEncontradoException;
 import com.alquilereventos.alquiler.exception.ReglaNegocioException;
 import com.alquilereventos.alquiler.mapper.OrdenAlquilerMapper;
@@ -22,6 +23,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -34,6 +40,17 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Logica de negocio de ordenes de alquiler.
+ *
+ * <p>Cache (Redis, seccion {@code alquiler:ordenes-alquiler}, TTL 1 min): solo la
+ * orden individual por id. GET /{id} = {@code @Cacheable}; crear/actualizar/cambio
+ * de estado = {@code @CachePut}; anulacion (baja logica) = {@code @CacheEvict}.
+ * Paginas y busquedas no se guardan como coleccion; solo calientan cada DTO.
+ * No se cachea el stock de Equipo.</p>
+ *
+ * <p>Usuario actor: siempre llega desde el JWT (claim uid), nunca desde el body.</p>
+ */
 @Service
 public class OrdenAlquilerServiceImpl implements OrdenAlquilerService {
 
@@ -45,6 +62,9 @@ public class OrdenAlquilerServiceImpl implements OrdenAlquilerService {
     private final ClienteRepository clienteRepository;
     private final UsuarioRepository usuarioRepository;
     private final OrdenAlquilerMapper ordenAlquilerMapper;
+    private final CacheManager cacheManager;
+    private final CacheKeyFactory cacheKeys;
+    private final String ordenesAlquilerCacheName;
 
     /**
      * Porcentaje del total aplicado por cada dia de atraso (configurable via MORA_PORCENTAJE_DIA).
@@ -58,21 +78,39 @@ public class OrdenAlquilerServiceImpl implements OrdenAlquilerService {
                                     EquipoRepository equipoRepository,
                                     ClienteRepository clienteRepository,
                                     UsuarioRepository usuarioRepository,
-                                    OrdenAlquilerMapper ordenAlquilerMapper) {
+                                    OrdenAlquilerMapper ordenAlquilerMapper,
+                                    CacheManager cacheManager,
+                                    CacheKeyFactory cacheKeys,
+                                    @Value("${app.cache.domains.ordenes-alquiler.name}") String ordenesAlquilerCacheName) {
         this.ordenAlquilerRepository = ordenAlquilerRepository;
         this.historialRepository = historialRepository;
         this.equipoRepository = equipoRepository;
         this.clienteRepository = clienteRepository;
         this.usuarioRepository = usuarioRepository;
         this.ordenAlquilerMapper = ordenAlquilerMapper;
+        this.cacheManager = cacheManager;
+        this.cacheKeys = cacheKeys;
+        this.ordenesAlquilerCacheName = ordenesAlquilerCacheName;
+    }
+
+    /** Constructor para pruebas unitarias sin infraestructura Redis. */
+    public OrdenAlquilerServiceImpl(OrdenAlquilerRepository ordenAlquilerRepository,
+                                    OrdenAlquilerHistorialRepository historialRepository,
+                                    EquipoRepository equipoRepository,
+                                    ClienteRepository clienteRepository,
+                                    UsuarioRepository usuarioRepository,
+                                    OrdenAlquilerMapper ordenAlquilerMapper) {
+        this(ordenAlquilerRepository, historialRepository, equipoRepository, clienteRepository,
+                usuarioRepository, ordenAlquilerMapper, null, null, null);
     }
 
     @Override
     @Transactional
-    public OrdenAlquiler crear(OrdenAlquilerCrearRequest request) {
+    @CachePut(cacheNames = "${app.cache.domains.ordenes-alquiler.name}", key = "@cacheKeys.ordenAlquiler(#result.id)")
+    public OrdenAlquiler crear(OrdenAlquilerCrearRequest request, Integer usuarioActorId) {
         validarRequest(request);
         Cliente cliente = obtenerClienteActivo(request.getClienteId());
-        Usuario usuario = obtenerUsuario(request.getUsuarioId());
+        Usuario usuario = obtenerUsuarioActivo(usuarioActorId);
         int dias = calcularDias(request.getFechaEvento(), request.getFechaDevolucion());
 
         com.alquilereventos.common.entity.OrdenAlquiler orden =
@@ -95,19 +133,20 @@ public class OrdenAlquilerServiceImpl implements OrdenAlquilerService {
 
     @Override
     @Transactional
-    public OrdenAlquiler actualizar(Integer id, OrdenAlquilerCrearRequest request) {
+    @CachePut(cacheNames = "${app.cache.domains.ordenes-alquiler.name}", key = "@cacheKeys.ordenAlquiler(#id)")
+    public OrdenAlquiler actualizar(Integer id, OrdenAlquilerCrearRequest request, Integer usuarioActorId) {
         validarRequest(request);
         com.alquilereventos.common.entity.OrdenAlquiler orden = buscarOrden(id);
         if (orden.getEstado() != EstadoOrdenAlquiler.RESERVA) {
             throw new ReglaNegocioException("Solo pueden modificarse ordenes en estado RESERVA");
         }
 
+        // El actor autenticado debe existir y estar activo; la orden conserva al usuario que la registro.
+        obtenerUsuarioActivo(usuarioActorId);
         Cliente cliente = obtenerClienteActivo(request.getClienteId());
-        Usuario usuario = obtenerUsuario(request.getUsuarioId());
         int dias = calcularDias(request.getFechaEvento(), request.getFechaDevolucion());
 
         orden.setCliente(cliente);
-        orden.setUsuario(usuario);
         orden.setFechaEvento(request.getFechaEvento());
         orden.setFechaDevolucion(request.getFechaDevolucion());
 
@@ -115,21 +154,25 @@ public class OrdenAlquilerServiceImpl implements OrdenAlquilerService {
         orden.setTotal(total);
 
         com.alquilereventos.common.entity.OrdenAlquiler actualizada = ordenAlquilerRepository.save(orden);
-        log.info("Orden de alquiler actualizada: id={}, clienteId={}, dias={}, total={}",
-                id, request.getClienteId(), dias, total);
+        log.info("Orden de alquiler actualizada: id={}, clienteId={}, dias={}, total={}, actor={}",
+                id, request.getClienteId(), dias, total, usuarioActorId);
         return ordenAlquilerMapper.toDto(actualizada);
     }
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "${app.cache.domains.ordenes-alquiler.name}", key = "@cacheKeys.ordenAlquiler(#id)")
     public OrdenAlquiler obtenerPorId(Integer id) {
+        log.debug("Buscando orden de alquiler {} en la base de datos", id);
         return ordenAlquilerMapper.toDto(buscarOrden(id));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<OrdenAlquiler> listar(Pageable pageable) {
-        return ordenAlquilerRepository.findAll(pageable).map(ordenAlquilerMapper::toDto);
+        Page<OrdenAlquiler> pagina = ordenAlquilerRepository.findAll(pageable).map(ordenAlquilerMapper::toDto);
+        calentarOrdenes(pagina);
+        return pagina;
     }
 
     @Override
@@ -139,18 +182,21 @@ public class OrdenAlquilerServiceImpl implements OrdenAlquilerService {
                                       LocalDate fechaDesde,
                                       LocalDate fechaHasta,
                                       Pageable pageable) {
-        return ordenAlquilerRepository.buscar(estado, clienteId, fechaDesde, fechaHasta, pageable)
+        Page<OrdenAlquiler> pagina = ordenAlquilerRepository.buscar(estado, clienteId, fechaDesde, fechaHasta, pageable)
                 .map(ordenAlquilerMapper::toDto);
+        calentarOrdenes(pagina);
+        return pagina;
     }
 
     @Override
     @Transactional
-    public void eliminar(Integer id) {
+    @CacheEvict(cacheNames = "${app.cache.domains.ordenes-alquiler.name}", key = "@cacheKeys.ordenAlquiler(#id)")
+    public void eliminar(Integer id, Integer usuarioActorId) {
+        Usuario usuario = obtenerUsuarioActivo(usuarioActorId);
         com.alquilereventos.common.entity.OrdenAlquiler orden = buscarOrden(id);
         if (orden.getEstado() != EstadoOrdenAlquiler.RESERVA) {
             throw new ReglaNegocioException("Solo pueden anularse ordenes en estado RESERVA");
         }
-        Usuario usuario = orden.getUsuario();
         orden.setEstado(EstadoOrdenAlquiler.ANULADA);
         ordenAlquilerRepository.save(orden);
         registrarHistorial(orden, EstadoOrdenAlquiler.RESERVA.name(), EstadoOrdenAlquiler.ANULADA.name(), usuario, null);
@@ -159,12 +205,13 @@ public class OrdenAlquilerServiceImpl implements OrdenAlquilerService {
 
     @Override
     @Transactional
-    public OrdenAlquiler cambiarEstado(Integer id, OrdenAlquilerEstadoRequest request) {
-        if (request.getEstado() == null) {
+    @CachePut(cacheNames = "${app.cache.domains.ordenes-alquiler.name}", key = "@cacheKeys.ordenAlquiler(#id)")
+    public OrdenAlquiler cambiarEstado(Integer id, OrdenAlquilerEstadoRequest request, Integer usuarioActorId) {
+        if (request == null || request.getEstado() == null) {
             throw new ReglaNegocioException("El estado es obligatorio");
         }
         com.alquilereventos.common.entity.OrdenAlquiler orden = buscarOrden(id);
-        Usuario usuario = obtenerUsuario(request.getUsuarioId());
+        Usuario usuario = obtenerUsuarioActivo(usuarioActorId);
         EstadoOrdenAlquiler actual = orden.getEstado();
         EstadoOrdenAlquiler nuevo = EstadoOrdenAlquiler.valueOf(request.getEstado().name());
 
@@ -258,9 +305,16 @@ public class OrdenAlquilerServiceImpl implements OrdenAlquilerService {
         }
     }
 
-    private Usuario obtenerUsuario(Integer usuarioId) {
-        return usuarioRepository.findById(usuarioId)
+    private Usuario obtenerUsuarioActivo(Integer usuarioId) {
+        if (usuarioId == null) {
+            throw new ReglaNegocioException("El usuario autenticado es obligatorio");
+        }
+        Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Usuario no encontrado con id " + usuarioId));
+        if (!Boolean.TRUE.equals(usuario.getActivo())) {
+            throw new ReglaNegocioException("El usuario esta inactivo: " + usuarioId);
+        }
+        return usuario;
     }
 
     private com.alquilereventos.common.entity.OrdenAlquiler buscarOrden(Integer id) {
@@ -339,5 +393,16 @@ public class OrdenAlquilerServiceImpl implements OrdenAlquilerService {
         historialRepository.save(historial);
         log.debug("Historial registrado para orden {}: {} -> {} (mora={})",
                 orden.getId(), estadoAnterior, estadoNuevo, montoMora);
+    }
+
+    /** No guarda la pagina; carga individualmente las ordenes obtenidas. */
+    private void calentarOrdenes(Page<OrdenAlquiler> pagina) {
+        if (cacheManager == null || cacheKeys == null) {
+            return;
+        }
+        Cache cache = cacheManager.getCache(ordenesAlquilerCacheName);
+        if (cache != null) {
+            pagina.getContent().forEach(orden -> cache.put(cacheKeys.ordenAlquiler(orden.getId()), orden));
+        }
     }
 }

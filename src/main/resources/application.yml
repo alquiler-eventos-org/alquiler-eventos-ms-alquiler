@@ -24,6 +24,16 @@ spring:
         max-page-size: ${MAX_PAGE_SIZE:100}
         page-parameter: page
         size-parameter: size
+    # ---------- Redis compartido (Entrega 3) ----------
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME:}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL:false}
+  cache:
+    type: ${CACHE_TYPE:redis}
 
 logging:
   config: ${LOGGING_CONFIG:classpath:logback-spring.xml}
@@ -31,6 +41,7 @@ logging:
     root: ${LOG_LEVEL_ROOT:INFO}
     com.alquilereventos.alquiler.controller: ${LOG_LEVEL_CONTROLLER:INFO}
     com.alquilereventos.alquiler.service: ${LOG_LEVEL_SERVICE:DEBUG}
+    com.alquilereventos.alquiler.config.cache: ${LOG_LEVEL_CACHE:INFO}
     org.hibernate.SQL: ${LOG_LEVEL_SQL:DEBUG}
 
 app:
@@ -43,9 +54,39 @@ app:
     porcentaje-dia: ${MORA_PORCENTAJE_DIA:0.05}
   openapi:
     title: ${OPENAPI_TITLE:ms-alquiler - Clientes y Ordenes de Alquiler}
-    description: ${OPENAPI_DESCRIPTION:Microservicio de alquiler de equipos para eventos}
+    description: ${OPENAPI_DESCRIPTION:Microservicio de alquiler de equipos para eventos (entrega 3, con JWT y cache Redis)}
     version: ${OPENAPI_VERSION:1.0.0}
     server-url: ${OPENAPI_SERVER_URL:http://localhost:8080/api}
+
+  # ---------- Cache Redis (Entrega 3) ----------
+  # Politica de retencion (todo externo al codigo):
+  #   clientes          -> TTL 15 min (900 s)   objeto Cliente individual por id
+  #   ordenes-alquiler  -> TTL 1 min  (60 s)    objeto OrdenAlquiler individual por id
+  # ttl-seconds <= 0 significa "sin TTL" (persistente hasta invalidacion explicita).
+  # Nunca se cachean paginas, busquedas, passwords, tokens, errores ni stock de Equipo.
+  cache:
+    enabled: ${CACHE_ENABLED:true}
+    service-name: ${CACHE_SERVICE_NAME:alquiler}
+    key-prefix: ${CACHE_KEY_PREFIX:ae}
+    environment: ${CACHE_ENVIRONMENT:local}
+    key-version: ${CACHE_KEY_VERSION:v1}
+    domains:
+      clientes:
+        name: ${CACHE_CLIENTES_NAME:alquiler:clientes}
+        key-type: ${CACHE_CLIENTES_KEY_TYPE:cliente}
+        ttl-seconds: ${CACHE_CLIENTES_TTL_SECONDS:900}
+      ordenes-alquiler:
+        name: ${CACHE_ORDENES_ALQUILER_NAME:alquiler:ordenes-alquiler}
+        key-type: ${CACHE_ORDENES_ALQUILER_KEY_TYPE:orden-alquiler}
+        ttl-seconds: ${CACHE_ORDENES_ALQUILER_TTL_SECONDS:60}
+
+  # ---------- Seguridad JWT (Entrega 3) ----------
+  # Debe ser IDENTICO al de ms-seguridad, api-gateway y ms-compras.
+  security:
+    jwt:
+      secret: ${SECURITY_JWT_SECRET:}
+      issuer: ${SECURITY_JWT_ISSUER:alquiler-eventos-seguridad}
+      algorithm: ${SECURITY_JWT_ALGORITHM:HS256}
 
 server:
   port: ${SERVER_PORT:8081}

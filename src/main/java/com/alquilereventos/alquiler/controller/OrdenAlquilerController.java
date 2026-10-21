@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,12 +23,18 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/ordenes-alquiler")
+@PreAuthorize("hasAnyRole('ADMIN', 'ENCARGADO_DEPOSITO')")
+@SecurityRequirement(name = "bearerAuth")
 @Tag(name = "Ordenes-Alquiler", description = "Gestion de ordenes de alquiler de equipos: CRUD, filtros y cambio de estado")
 public class OrdenAlquilerController {
 
@@ -46,11 +53,12 @@ public class OrdenAlquilerController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Orden de alquiler creada", content = @Content(schema = @Schema(implementation = OrdenAlquiler.class))),
             @ApiResponse(responseCode = "400", description = "Datos invalidos o regla de negocio violada", content = @Content(schema = @Schema(implementation = com.alquilereventos.common.dto.ApiError.class))),
-            @ApiResponse(responseCode = "404", description = "Cliente, usuario o equipo no encontrado", content = @Content(schema = @Schema(implementation = com.alquilereventos.common.dto.ApiError.class)))
+            @ApiResponse(responseCode = "404", description = "Cliente o equipo no encontrado", content = @Content(schema = @Schema(implementation = com.alquilereventos.common.dto.ApiError.class)))
     })
-    public ResponseEntity<OrdenAlquiler> crear(@RequestBody OrdenAlquilerCrearRequest request) {
+    public ResponseEntity<OrdenAlquiler> crear(@RequestBody OrdenAlquilerCrearRequest request,
+                                               @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt) {
         log.info("POST /ordenes-alquiler - crear orden (clienteId={})", request.getClienteId());
-        OrdenAlquiler creada = ordenAlquilerService.crear(request);
+        OrdenAlquiler creada = ordenAlquilerService.crear(request, usuarioId(jwt));
         return ResponseEntity.status(HttpStatus.CREATED).body(creada);
     }
 
@@ -60,12 +68,13 @@ public class OrdenAlquilerController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Orden de alquiler actualizada", content = @Content(schema = @Schema(implementation = OrdenAlquiler.class))),
             @ApiResponse(responseCode = "400", description = "Datos invalidos o la orden no esta en RESERVA", content = @Content(schema = @Schema(implementation = com.alquilereventos.common.dto.ApiError.class))),
-            @ApiResponse(responseCode = "404", description = "Orden, cliente, usuario o equipo no encontrado", content = @Content(schema = @Schema(implementation = com.alquilereventos.common.dto.ApiError.class)))
+            @ApiResponse(responseCode = "404", description = "Orden, cliente o equipo no encontrado", content = @Content(schema = @Schema(implementation = com.alquilereventos.common.dto.ApiError.class)))
     })
     public ResponseEntity<OrdenAlquiler> actualizar(@PathVariable Integer id,
-                                                    @RequestBody OrdenAlquilerCrearRequest request) {
+                                                    @RequestBody OrdenAlquilerCrearRequest request,
+                                                    @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt) {
         log.info("PUT /ordenes-alquiler/{} - actualizar orden", id);
-        OrdenAlquiler actualizada = ordenAlquilerService.actualizar(id, request);
+        OrdenAlquiler actualizada = ordenAlquilerService.actualizar(id, request, usuarioId(jwt));
         return ResponseEntity.ok(actualizada);
     }
 
@@ -123,9 +132,10 @@ public class OrdenAlquilerController {
             @ApiResponse(responseCode = "400", description = "La orden no esta en RESERVA", content = @Content(schema = @Schema(implementation = com.alquilereventos.common.dto.ApiError.class))),
             @ApiResponse(responseCode = "404", description = "Orden de alquiler no encontrada", content = @Content(schema = @Schema(implementation = com.alquilereventos.common.dto.ApiError.class)))
     })
-    public ResponseEntity<Void> eliminar(@PathVariable Integer id) {
+    public ResponseEntity<Void> eliminar(@PathVariable Integer id,
+                                         @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt) {
         log.info("DELETE /ordenes-alquiler/{} - anular orden (borrado logico)", id);
-        ordenAlquilerService.eliminar(id);
+        ordenAlquilerService.eliminar(id, usuarioId(jwt));
         return ResponseEntity.ok().build();
     }
 
@@ -136,12 +146,28 @@ public class OrdenAlquilerController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Estado actualizado", content = @Content(schema = @Schema(implementation = OrdenAlquiler.class))),
             @ApiResponse(responseCode = "400", description = "Transicion invalida o regla de negocio violada", content = @Content(schema = @Schema(implementation = com.alquilereventos.common.dto.ApiError.class))),
-            @ApiResponse(responseCode = "404", description = "Orden de alquiler o usuario no encontrado", content = @Content(schema = @Schema(implementation = com.alquilereventos.common.dto.ApiError.class)))
+            @ApiResponse(responseCode = "404", description = "Orden de alquiler no encontrada", content = @Content(schema = @Schema(implementation = com.alquilereventos.common.dto.ApiError.class)))
     })
     public ResponseEntity<OrdenAlquiler> cambiarEstado(@PathVariable Integer id,
-                                                       @RequestBody OrdenAlquilerEstadoRequest request) {
+                                                       @RequestBody OrdenAlquilerEstadoRequest request,
+                                                       @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt) {
         log.info("PUT /ordenes-alquiler/{}/estado - nuevo estado={}", id, request.getEstado());
-        OrdenAlquiler actualizada = ordenAlquilerService.cambiarEstado(id, request);
+        OrdenAlquiler actualizada = ordenAlquilerService.cambiarEstado(id, request, usuarioId(jwt));
         return ResponseEntity.ok(actualizada);
+    }
+
+    /**
+     * Usuario actor = claim "uid" del JWT ya validado (firma, expiracion, issuer).
+     * Nunca se acepta un usuarioId desde el body de la peticion.
+     */
+    private Integer usuarioId(Jwt jwt) {
+        if (jwt == null || jwt.getClaimAsString("uid") == null) {
+            throw new BadCredentialsException("El token no contiene un uid valido");
+        }
+        try {
+            return Integer.valueOf(jwt.getClaimAsString("uid"));
+        } catch (NumberFormatException ex) {
+            throw new BadCredentialsException("El token no contiene un uid valido");
+        }
     }
 }

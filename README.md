@@ -335,3 +335,53 @@ Niveles por capa (configurables con las variables `LOG_LEVEL_*` de la tabla):
 - [x] Registro en Eureka + ruteo dinámico `lb://` desde el Gateway
 - [x] Conexión a la BD remota compartida (Supabase)
 - [x] README con instrucciones de corrida
+
+---
+
+## Entrega 3 — Seguridad JWT y caché Redis
+
+`ms-alquiler` valida por su cuenta el JWT emitido por `ms-seguridad` (segunda capa
+tras el API Gateway) y cachea sus objetos individuales en el Redis compartido.
+
+### Seguridad
+
+- Spring Security + OAuth2 Resource Server. `JwtDecoder` HS256 (configurable) con el
+  mismo `SECURITY_JWT_SECRET` e issuer que Seguridad, Gateway y Compras.
+- El claim `roles` se convierte en `ROLE_ADMIN`, `ROLE_ENCARGADO_DEPOSITO`, etc.
+- Autorización **por URL** (`AlquilerSecurityConfig`) y **por método**
+  (`@PreAuthorize` en los controllers): `/clientes/**` y `/ordenes-alquiler/**`
+  requieren `ADMIN` o `ENCARGADO_DEPOSITO`. Swagger, `/v3/api-docs`, `/actuator/health`
+  y `OPTIONS` son públicos.
+- 401 / 403 se responden como `ApiError` sin stacktrace (`SecurityErrorHandler`).
+- **Usuario actor**: crear, editar, cambiar estado y anular una orden toman el `uid`
+  del JWT (`@AuthenticationPrincipal Jwt`). `usuarioId` ya no existe en los requests.
+
+### Caché Redis (política de retención)
+
+| Dominio (cache) | Objeto | TTL | Clave |
+|---|---|---|---|
+| `alquiler:clientes` | `Cliente` individual por id | 15 min (900 s) | `ae:local:alquiler:cliente:v1:<id>` |
+| `alquiler:ordenes-alquiler` | `OrdenAlquiler` individual por id | 1 min (60 s) | `ae:local:alquiler:orden-alquiler:v1:<id>` |
+
+- `GET /{id}` → `@Cacheable` (cache-aside). `POST` / `PUT` / cambio de estado → `@CachePut`.
+  Baja lógica / anulación → `@CacheEvict`.
+- Páginas y búsquedas **no** se guardan como colección; solo se calientan los DTO
+  individuales con el `CacheManager` de forma programática.
+- No se cachea: passwords, tokens, errores, nulos, colecciones, stock de `Equipo`.
+- Todas las operaciones se registran: `CACHE GET (HIT/MISS)`, `CACHE SET`, `CACHE DELETE`, `CACHE ERROR`.
+- Si Redis no está disponible la API sigue contra PostgreSQL. `CACHE_ENABLED=false` desactiva el caché.
+
+### Variables de entorno nuevas
+
+| Variable | Defecto | Descripción |
+|---|---|---|
+| `SECURITY_JWT_SECRET` | *(obligatoria)* | Base64 de 32+ bytes, **idéntico** en todos los servicios |
+| `SECURITY_JWT_ISSUER` | `alquiler-eventos-seguridad` | Emisor esperado |
+| `SECURITY_JWT_ALGORITHM` | `HS256` | `HS256`, `HS384` o `HS512` |
+| `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Redis compartido |
+| `REDIS_USERNAME` / `REDIS_PASSWORD` / `REDIS_SSL` | vacío / vacío / `false` | Credenciales de Redis |
+| `CACHE_ENABLED` | `true` | Activa/desactiva el caché |
+| `CACHE_SERVICE_NAME` | `alquiler` | Segmento de servicio en la clave |
+| `CACHE_KEY_PREFIX` / `CACHE_ENVIRONMENT` / `CACHE_KEY_VERSION` | `ae` / `local` / `v1` | Formato de claves |
+| `CACHE_CLIENTES_NAME` / `_KEY_TYPE` / `_TTL_SECONDS` | `alquiler:clientes` / `cliente` / `900` | Dominio clientes |
+| `CACHE_ORDENES_ALQUILER_NAME` / `_KEY_TYPE` / `_TTL_SECONDS` | `alquiler:ordenes-alquiler` / `orden-alquiler` / `60` | Dominio órdenes |
