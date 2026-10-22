@@ -368,6 +368,7 @@ tras el API Gateway) y cachea sus objetos individuales en el Redis compartido.
 - Páginas y búsquedas **no** se guardan como colección; solo se calientan los DTO
   individuales con el `CacheManager` de forma programática.
 - No se cachea: passwords, tokens, errores, nulos, colecciones, stock de `Equipo`.
+- Retención: todos los objetos cacheados en ms-alquiler son **temporales** (clientes 900 s, órdenes 60 s). Este micro no tiene objetos persistentes (sin TTL); el único objeto persistente del sistema son los roles, en ms-seguridad.
 - Todas las operaciones se registran: `CACHE GET (HIT/MISS)`, `CACHE SET`, `CACHE DELETE`, `CACHE ERROR`.
 - Si Redis no está disponible la API sigue contra PostgreSQL. `CACHE_ENABLED=false` desactiva el caché.
 
