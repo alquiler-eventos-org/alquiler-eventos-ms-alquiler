@@ -82,6 +82,8 @@ public class AlquilerSecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**",
                                 "/actuator/health").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/equipos/**")
+                        .hasAnyRole("ADMIN", "ENCARGADO_DEPOSITO", "ENCARGADO_COMPRAS")
                         .requestMatchers("/clientes/**", "/ordenes-alquiler/**")
                         .hasAnyRole("ADMIN", "ENCARGADO_DEPOSITO")
                         .anyRequest().authenticated())
