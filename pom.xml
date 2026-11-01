@@ -32,6 +32,11 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
+		<!-- Recordatorios de devolucion por correo (SMTP opcional, ver application.yml) -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
 		<!-- Entrega 3: health publico para el gateway y la demo -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
