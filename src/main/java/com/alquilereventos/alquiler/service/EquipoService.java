@@ -1,6 +1,5 @@
 package com.alquilereventos.alquiler.service;
 
-import com.alquilereventos.alquiler.dto.CategoriaResponse;
 import com.alquilereventos.alquiler.dto.EquipoRequest;
 import com.alquilereventos.alquiler.dto.EquipoResponse;
 import com.alquilereventos.alquiler.exception.RecursoNoEncontradoException;
@@ -12,11 +11,9 @@ import com.alquilereventos.common.repository.CategoriaEquipoRepository;
 import com.alquilereventos.common.repository.EquipoRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 
 /**
  * Equipos: consulta, alta, edicion y baja logica (estado BAJA). Ademas, el stock
@@ -41,13 +38,6 @@ public class EquipoService {
     @Transactional(readOnly = true)
     public EquipoResponse obtener(Integer id) {
         return aRespuesta(buscar(id));
-    }
-
-    @Transactional(readOnly = true)
-    public List<CategoriaResponse> categorias() {
-        return categoriaRepository.findAll(Sort.by("nombre")).stream()
-                .map(c -> new CategoriaResponse(c.getId(), c.getNombre()))
-                .toList();
     }
 
     @Transactional

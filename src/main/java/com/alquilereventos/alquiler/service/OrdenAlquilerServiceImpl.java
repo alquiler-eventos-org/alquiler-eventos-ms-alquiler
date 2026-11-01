@@ -65,6 +65,7 @@ public class OrdenAlquilerServiceImpl implements OrdenAlquilerService {
     private final CacheManager cacheManager;
     private final CacheKeyFactory cacheKeys;
     private final String ordenesAlquilerCacheName;
+    private final ConfiguracionService configuracionService;
 
     /**
      * Porcentaje del total aplicado por cada dia de atraso (configurable via MORA_PORCENTAJE_DIA).
@@ -81,7 +82,8 @@ public class OrdenAlquilerServiceImpl implements OrdenAlquilerService {
                                     OrdenAlquilerMapper ordenAlquilerMapper,
                                     CacheManager cacheManager,
                                     CacheKeyFactory cacheKeys,
-                                    @Value("${app.cache.domains.ordenes-alquiler.name}") String ordenesAlquilerCacheName) {
+                                    @Value("${app.cache.domains.ordenes-alquiler.name}") String ordenesAlquilerCacheName,
+                                    ConfiguracionService configuracionService) {
         this.ordenAlquilerRepository = ordenAlquilerRepository;
         this.historialRepository = historialRepository;
         this.equipoRepository = equipoRepository;
@@ -91,6 +93,7 @@ public class OrdenAlquilerServiceImpl implements OrdenAlquilerService {
         this.cacheManager = cacheManager;
         this.cacheKeys = cacheKeys;
         this.ordenesAlquilerCacheName = ordenesAlquilerCacheName;
+        this.configuracionService = configuracionService;
     }
 
     /** Constructor para pruebas unitarias sin infraestructura Redis. */
@@ -101,7 +104,7 @@ public class OrdenAlquilerServiceImpl implements OrdenAlquilerService {
                                     UsuarioRepository usuarioRepository,
                                     OrdenAlquilerMapper ordenAlquilerMapper) {
         this(ordenAlquilerRepository, historialRepository, equipoRepository, clienteRepository,
-                usuarioRepository, ordenAlquilerMapper, null, null, null);
+                usuarioRepository, ordenAlquilerMapper, null, null, null, null);
     }
 
     @Override
@@ -372,6 +375,10 @@ public class OrdenAlquilerServiceImpl implements OrdenAlquilerService {
         long diasAtraso = ChronoUnit.DAYS.between(orden.getFechaDevolucion(), LocalDate.now());
         if (diasAtraso <= 0) {
             return null;
+        }
+        // Con la tarifa de mora por dia configurada (Configuracion) se usa esa; si no, el porcentaje.
+        if (configuracionService != null) {
+            return configuracionService.montoMora(orden.getTotal(), diasAtraso);
         }
         return BigDecimal.valueOf(diasAtraso)
                 .multiply(orden.getTotal())
