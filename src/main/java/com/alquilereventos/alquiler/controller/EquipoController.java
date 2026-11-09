@@ -52,7 +52,7 @@ public class EquipoController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'ENCARGADO_DEPOSITO')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ENCARGADO_DEPOSITO', 'ENCARGADO_COMPRAS')")
     @Operation(summary = "Crea un equipo")
     public ResponseEntity<EquipoResponse> crear(@Valid @RequestBody EquipoRequest request) {
         log.info("POST /equipos - crear equipo '{}'", request.nombre());

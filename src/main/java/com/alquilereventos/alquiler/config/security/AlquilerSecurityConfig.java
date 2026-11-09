@@ -94,6 +94,9 @@ public class AlquilerSecurityConfig {
                         .hasRole("ADMIN")
                         .requestMatchers("/configuracion/**")
                         .hasAnyRole("ADMIN", "ENCARGADO_DEPOSITO")
+                        // Compras puede dar de alta un producto nuevo desde la factura de compra.
+                        .requestMatchers(HttpMethod.POST, "/equipos")
+                        .hasAnyRole("ADMIN", "ENCARGADO_DEPOSITO", "ENCARGADO_COMPRAS")
                         .requestMatchers("/equipos/**")
                         .hasAnyRole("ADMIN", "ENCARGADO_DEPOSITO")
                         .requestMatchers("/clientes/**", "/ordenes-alquiler/**")
