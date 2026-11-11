@@ -71,7 +71,7 @@ app:
   # ---------- Cache Redis (Entrega 3) ----------
   # Politica de retencion (todo externo al codigo):
   #   clientes          -> TTL 15 min (900 s)   objeto Cliente individual por id
-  #   ordenes-alquiler  -> TTL 1 min  (60 s)    objeto OrdenAlquiler individual por id
+  #   ordenes-alquiler  -> TTL 10 min (600 s)  objeto OrdenAlquiler individual por id
   # ttl-seconds <= 0 significa "sin TTL" (persistente hasta invalidacion explicita).
   # Nunca se cachean paginas, busquedas, passwords, tokens, errores ni stock de Equipo.
   cache:
@@ -88,7 +88,7 @@ app:
       ordenes-alquiler:
         name: ${CACHE_ORDENES_ALQUILER_NAME:alquiler:ordenes-alquiler}
         key-type: ${CACHE_ORDENES_ALQUILER_KEY_TYPE:orden-alquiler}
-        ttl-seconds: ${CACHE_ORDENES_ALQUILER_TTL_SECONDS:60}
+        ttl-seconds: ${CACHE_ORDENES_ALQUILER_TTL_SECONDS:600}
 
   # ---------- Seguridad JWT (Entrega 3) ----------
   # Debe ser IDENTICO al de ms-seguridad, api-gateway y ms-compras.

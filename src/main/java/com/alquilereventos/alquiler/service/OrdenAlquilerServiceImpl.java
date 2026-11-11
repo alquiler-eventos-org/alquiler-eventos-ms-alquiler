@@ -43,7 +43,7 @@ import java.util.List;
 /**
  * Logica de negocio de ordenes de alquiler.
  *
- * <p>Cache (Redis, seccion {@code alquiler:ordenes-alquiler}, TTL 1 min): solo la
+ * <p>Cache (Redis, seccion {@code alquiler:ordenes-alquiler}, TTL 10 min): solo la
  * orden individual por id. GET /{id} = {@code @Cacheable}; crear/actualizar/cambio
  * de estado = {@code @CachePut}; anulacion (baja logica) = {@code @CacheEvict}.
  * Paginas y busquedas no se guardan como coleccion; solo calientan cada DTO.
